@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project · SingleCellX</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+
+    <nav class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span class="brand-name">SingleCellX</span>
+        <span class="brand-suffix">v1.0</span>
+      </div>
+      <div class="topbar-spacer"></div>
+      <a href="/dashboard.html" class="nav-link">Projects</a>
+      <div id="user-pill" class="user-pill"><span class="dot"></span><span id="user-name">…</span></div>
+      <button class="btn-logout" onclick="logout()">Sign out</button>
+    </nav>
+
+    <div class="container">
+
+      <!-- Breadcrumb -->
+      <div class="breadcrumb">
+        <a href="/dashboard.html">Projects</a>
+        <span class="breadcrumb-sep">›</span>
+        <span id="bc-name">…</span>
+      </div>
+
+      <!-- Project header -->
+      <div class="page-header">
+        <div>
+          <div class="page-eyebrow">Project</div>
+          <h1 class="page-title" id="project-name">Loading…</h1>
+          <p class="page-subtitle" id="project-desc"></p>
+          <div class="project-meta">
+            <span class="meta-chip"><strong id="meta-datasets">0</strong> datasets</span>
+            <span class="meta-chip"><strong id="meta-analyses">0</strong> analysis runs</span>
+            <span class="meta-chip">Created <span id="meta-created">—</span></span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-danger" onclick="deleteProject()">Delete project</button>
+        </div>
+      </div>
+
+      <!-- DATASETS SECTION -->
+      <div class="section-header">
+        <h2 class="section-title">Datasets</h2>
+        <div class="section-actions">
+          <button class="btn btn-ghost" onclick="openDemoModal()">⚗ Generate demo dataset</button>
+          <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">↑ Upload CSV</button>
+          <input type="file" id="file-input" accept=".csv" style="display:none" onchange="uploadFile(event)">
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="ds-loading" class="empty"><div class="spinner"></div></div>
+        <div id="ds-empty" class="empty hidden">
+          <div class="empty-icon">⊕</div>
+          <h3>No datasets yet</h3>
+          <p class="text-dim">Upload a gene-expression CSV (cells in rows, genes in columns) or generate a synthetic dataset to get started.</p>
+        </div>
+        <table class="table hidden" id="ds-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Source</th>
+              <th>Cells</th>
+              <th>Genes</th>
+              <th>Size</th>
+              <th>Uploaded</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ds-body"></tbody>
+        </table>
+      </div>
+
+      <!-- ANALYSES SECTION -->
+      <div class="section-header" style="margin-top:48px;">
+        <h2 class="section-title">Analysis runs</h2>
+        <div class="section-actions">
+          <button class="btn btn-primary" onclick="openAnalysisModal()" id="btn-new-analysis" disabled>+ New analysis</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div id="an-loading" class="empty"><div class="spinner"></div></div>
+        <div id="an-empty" class="empty hidden">
+          <div class="empty-icon">∿</div>
+          <h3>No analysis runs yet</h3>
+          <p class="text-dim">Create a dataset first, then launch your first end-to-end pipeline run.</p>
+        </div>
+        <table class="table hidden" id="an-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Dataset</th>
+              <th>Status</th>
+              <th>Progress</th>
+              <th>Cells (QC)</th>
+              <th>Clusters</th>
+              <th>Started</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="an-body"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- DEMO DATASET MODAL -->
+  <div class="modal-backdrop hidden" id="demo-modal" onclick="if(event.target===this)closeDemoModal()">
+    <div class="modal">
+      <h3 class="modal-title">Generate synthetic dataset</h3>
+      <p class="text-dim text-sm">Creates a negative-binomial expression matrix with planted cluster structure. Useful for benchmarking the pipeline without real data.</p>
+      <form onsubmit="submitDemo(event)">
+        <div class="grid-2">
+          <div class="field">
+            <label class="field-label">Cells</label>
+            <input class="form-input" type="number" id="demo-cells" value="300" min="50" max="10000" required>
+          </div>
+          <div class="field">
+            <label class="field-label">Genes</label>
+            <input class="form-input" type="number" id="demo-genes" value="800" min="50" max="20000" required>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">Ground-truth clusters</label>
+          <input class="form-input" type="number" id="demo-clusters" value="4" min="2" max="20" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="closeDemoModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="demo-submit">Generate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- NEW ANALYSIS MODAL -->
+  <div class="modal-backdrop hidden" id="an-modal" onclick="if(event.target===this)closeAnalysisModal()">
+    <div class="modal modal-wide">
+      <h3 class="modal-title">Launch analysis pipeline</h3>
+      <p class="text-dim text-sm">Configure the full pipeline: QC filtering → normalization → PCA → UMAP/t-SNE → clustering → marker discovery.</p>
+      <form onsubmit="submitAnalysis(event)">
+        <div class="field">
+          <label class="field-label">Run name</label>
+          <input class="form-input" type="text" id="an-name" placeholder="e.g. PBMC k-means baseline" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Dataset</label>
+          <select class="form-select" id="an-dataset" required></select>
+        </div>
+
+        <div class="param-section">
+          <div class="param-label">Quality control</div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label">Min genes / cell <span class="hint">(filter low-quality cells)</span></label>
+              <input class="form-input" type="number" id="p-min-genes" value="150" min="10" max="5000">
+            </div>
+            <div class="field">
+              <label class="field-label">Min cells / gene <span class="hint">(drop rare genes)</span></label>
+              <input class="form-input" type="number" id="p-min-cells" value="3" min="1" max="500">
+            </div>
+          </div>
+        </div>
+
+        <div class="param-section">
+          <div class="param-label">Dimensionality reduction</div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label">PCA components</label>
+              <input class="form-input" type="number" id="p-pca" value="50" min="2" max="200">
+            </div>
+            <div class="field">
+              <label class="field-label">UMAP neighbors</label>
+              <input class="form-input" type="number" id="p-umap-n" value="15" min="2" max="200">
+            </div>
+            <div class="field">
+              <label class="field-label">UMAP min_dist</label>
+              <input class="form-input" type="number" id="p-umap-d" value="0.1" min="0.001" max="1.0" step="0.01">
+            </div>
+            <div class="field">
+              <label class="field-label">t-SNE perplexity</label>
+              <input class="form-input" type="number" id="p-tsne" value="30" min="5" max="100">
+            </div>
+          </div>
+        </div>
+
+        <div class="param-section">
+          <div class="param-label">Clustering &amp; markers</div>
+          <div class="grid-2">
+            <div class="field">
+              <label class="field-label">Clusters (k) <span class="hint">(leave empty for auto-elbow)</span></label>
+              <input class="form-input" type="number" id="p-clusters" placeholder="auto" min="2" max="30">
+            </div>
+            <div class="field">
+              <label class="field-label">Marker genes per cluster</label>
+              <input class="form-input" type="number" id="p-markers" value="15" min="1" max="200">
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="closeAnalysisModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="an-submit">▶ Run pipeline</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!requireAuth()) {}
+
+    const params  = new URLSearchParams(window.location.search);
+    const projectId = parseInt(params.get('id'));
+    if (!projectId) window.location.href = '/dashboard.html';
+
+    let pollTimer = null;
+
+    /* ---------- bootstrap ---------- */
+    (async function init() {
+      try {
+        const me = await Api.me();
+        document.getElementById('user-name').textContent = me.full_name || me.username;
+      } catch (e) { logout(); return; }
+
+      await loadProject();
+      await loadDatasets();
+      await loadAnalyses();
+      pollTimer = setInterval(pollRunning, 2500);
+    })();
+
+    async function loadProject() {
+      try {
+        const p = await Api.getProject(projectId);
+        document.getElementById('project-name').textContent = p.name;
+        document.getElementById('bc-name').textContent = p.name;
+        document.getElementById('project-desc').textContent = p.description || 'No description';
+        document.getElementById('meta-created').textContent = new Date(p.created_at).toLocaleDateString();
+      } catch (e) {
+        toast('Project not found', 'error');
+        setTimeout(() => window.location.href = '/dashboard.html', 1500);
+      }
+    }
+
+    /* ---------- datasets ---------- */
+    async function loadDatasets() {
+      try {
+        const items = await Api.listDatasets(projectId);
+        const dsLoading = document.getElementById('ds-loading');
+        const dsEmpty   = document.getElementById('ds-empty');
+        const dsTable   = document.getElementById('ds-table');
+        const body      = document.getElementById('ds-body');
+
+        dsLoading.classList.add('hidden');
+        document.getElementById('meta-datasets').textContent = items.length;
+
+        if (items.length === 0) {
+          dsEmpty.classList.remove('hidden');
+          dsTable.classList.add('hidden');
+          document.getElementById('btn-new-analysis').disabled = true;
+          return;
+        }
+        dsEmpty.classList.add('hidden');
+        dsTable.classList.remove('hidden');
+        document.getElementById('btn-new-analysis').disabled = false;
+
+        body.innerHTML = items.map(d => `
+          <tr>
+            <td class="strong">${escapeHtml(d.filename)}</td>
+            <td><span class="pill pill-cyan">csv</span></td>
+            <td class="mono">${d.n_cells.toLocaleString()}</td>
+            <td class="mono">${d.n_genes.toLocaleString()}</td>
+            <td class="mono text-dim">${formatBytes(d.file_size_bytes)}</td>
+            <td class="text-dim text-sm">${formatDate(d.uploaded_at)}</td>
+            <td><button class="btn-icon" title="Delete" onclick="deleteDataset(${d.id})">✕</button></td>
+          </tr>
+        `).join('');
+
+        // populate dataset select in modal
+        const sel = document.getElementById('an-dataset');
+        sel.innerHTML = items.map(d => `<option value="${d.id}">${escapeHtml(d.filename)} — ${d.n_cells}×${d.n_genes}</option>`).join('');
+      } catch (e) {
+        toast('Failed to load datasets: ' + e.message, 'error');
+      }
+    }
+
+    async function uploadFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (file.size > 100 * 1024 * 1024) { toast('File exceeds 100 MB limit', 'error'); return; }
+      toast(`Uploading ${file.name}…`, 'info');
+      try {
+        await Api.uploadDataset(projectId, file);
+        toast('Dataset uploaded', 'success');
+        await loadDatasets();
+      } catch (e) {
+        toast('Upload failed: ' + e.message, 'error');
+      } finally {
+        event.target.value = '';
+      }
+    }
+
+    async function deleteDataset(id) {
+      if (!confirm('Delete this dataset? Linked analysis runs will also be removed.')) return;
+      try {
+        await Api.deleteDataset(id);
+        toast('Dataset deleted', 'success');
+        await loadDatasets();
+        await loadAnalyses();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    function openDemoModal()  { document.getElementById('demo-modal').classList.remove('hidden'); }
+    function closeDemoModal() { document.getElementById('demo-modal').classList.add('hidden'); }
+
+    async function submitDemo(e) {
+      e.preventDefault();
+      const btn = document.getElementById('demo-submit');
+      btn.disabled = true; btn.textContent = 'Generating…';
+      try {
+        await Api.createDemoDataset(projectId, {
+          n_cells:    parseInt(document.getElementById('demo-cells').value),
+          n_genes:    parseInt(document.getElementById('demo-genes').value),
+          n_clusters: parseInt(document.getElementById('demo-clusters').value),
+        });
+        toast('Synthetic dataset created', 'success');
+        closeDemoModal();
+        await loadDatasets();
+      } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Generate';
+      }
+    }
+
+    /* ---------- analyses ---------- */
+    async function loadAnalyses() {
+      try {
+        const runs = await Api.listAnalyses(projectId);
+        const anLoading = document.getElementById('an-loading');
+        const anEmpty   = document.getElementById('an-empty');
+        const anTable   = document.getElementById('an-table');
+        const body      = document.getElementById('an-body');
+
+        anLoading.classList.add('hidden');
+        document.getElementById('meta-analyses').textContent = runs.length;
+
+        if (runs.length === 0) {
+          anEmpty.classList.remove('hidden');
+          anTable.classList.add('hidden');
+          return;
+        }
+        anEmpty.classList.add('hidden');
+        anTable.classList.remove('hidden');
+
+        // also need dataset names — fetch once
+        const datasets = await Api.listDatasets(projectId);
+        const dsMap = Object.fromEntries(datasets.map(d => [d.id, d.filename]));
+
+        body.innerHTML = runs.map(r => {
+          const isOpenable = r.status === 'completed';
+          const statusPill = `pill-${statusColor(r.status)}` + (r.status === 'running' ? ' pill-pulse' : '');
+          return `
+            <tr ${isOpenable ? `style="cursor:pointer" onclick="window.location.href='/analysis.html?id=${r.id}'"` : ''}>
+              <td class="strong">${escapeHtml(r.name)}</td>
+              <td class="text-dim">${escapeHtml(dsMap[r.dataset_id] || 'Dataset #' + r.dataset_id)}</td>
+              <td><span class="pill ${statusPill}">${r.status}</span></td>
+              <td>
+                <div class="progress-track" style="width:140px">
+                  <div class="progress-fill" style="width:${r.progress}%"></div>
+                </div>
+                <div class="text-dim text-xs mt-4">${r.current_step || r.progress + '%'}</div>
+              </td>
+              <td class="mono">${r.n_cells_qc ?? '—'}</td>
+              <td class="mono">${r.n_clusters ?? '—'}</td>
+              <td class="text-dim text-sm">${formatDate(r.created_at)}</td>
+              <td onclick="event.stopPropagation()">
+                ${isOpenable ? `<a href="/analysis.html?id=${r.id}" class="btn btn-sm btn-ghost">Open →</a>` : ''}
+                <button class="btn-icon" title="Delete" onclick="deleteRun(${r.id})">✕</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {
+        toast('Failed to load runs: ' + e.message, 'error');
+      }
+    }
+
+    async function pollRunning() {
+      // Re-fetch only if there are running / queued runs visible
+      const rows = document.querySelectorAll('#an-body .pill');
+      const hasActive = Array.from(rows).some(r => /running|queued|pending/.test(r.textContent));
+      if (hasActive) await loadAnalyses();
+    }
+
+    function openAnalysisModal()  { document.getElementById('an-modal').classList.remove('hidden'); }
+    function closeAnalysisModal() { document.getElementById('an-modal').classList.add('hidden'); }
+
+    async function submitAnalysis(e) {
+      e.preventDefault();
+      const btn = document.getElementById('an-submit');
+      btn.disabled = true; btn.textContent = 'Queuing…';
+      const kVal = document.getElementById('p-clusters').value;
+      const payload = {
+        dataset_id: parseInt(document.getElementById('an-dataset').value),
+        name:       document.getElementById('an-name').value.trim(),
+        parameters: {
+          min_genes_per_cell: parseInt(document.getElementById('p-min-genes').value),
+          min_cells_per_gene: parseInt(document.getElementById('p-min-cells').value),
+          n_pca_components:   parseInt(document.getElementById('p-pca').value),
+          n_clusters:         kVal === '' ? null : parseInt(kVal),
+          umap_n_neighbors:   parseInt(document.getElementById('p-umap-n').value),
+          umap_min_dist:      parseFloat(document.getElementById('p-umap-d').value),
+          tsne_perplexity:    parseInt(document.getElementById('p-tsne').value),
+          n_marker_genes:     parseInt(document.getElementById('p-markers').value),
+        },
+      };
+      try {
+        await Api.createAnalysis(payload);
+        toast('Pipeline queued', 'success');
+        closeAnalysisModal();
+        await loadAnalyses();
+      } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = '▶ Run pipeline';
+      }
+    }
+
+    async function deleteRun(id) {
+      if (!confirm('Delete this analysis run?')) return;
+      try {
+        await Api.deleteAnalysis(id);
+        toast('Run deleted', 'success');
+        await loadAnalyses();
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteProject() {
+      if (!confirm('Delete this entire project? All datasets and analysis runs will be lost.')) return;
+      try {
+        await Api.deleteProject(projectId);
+        toast('Project deleted', 'success');
+        setTimeout(() => window.location.href = '/dashboard.html', 800);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+
+    /* ---------- helpers ---------- */
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function formatBytes(b) {
+      if (!b) return '—';
+      const units = ['B','KB','MB','GB'];
+      let i = 0; while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+      return b.toFixed(1) + ' ' + units[i];
+    }
+    function formatDate(s) {
+      const d = new Date(s);
+      const now = new Date();
+      const diff = (now - d) / 1000;
+      if (diff < 60)   return 'just now';
+      if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+      return d.toLocaleDateString();
+    }
+    function statusColor(s) {
+      return { pending:'amber', queued:'amber', running:'cyan', completed:'lime', failed:'red' }[s] || 'dim';
+    }
+  </script>
+</body>
+</html>

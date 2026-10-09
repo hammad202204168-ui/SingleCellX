@@ -1,0 +1,25 @@
+# Virtual environments
+.venv/
+venv/
+win_venv/
+backend/win_venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local data / secrets
+.env
+*.db
+backend/uploads/*
+backend/storage/*
+backend/data/*
+!backend/uploads/.gitkeep
+!backend/storage/.gitkeep
+!backend/data/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

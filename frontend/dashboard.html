@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard · SingleCellX</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+
+    <nav class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span class="brand-name">SingleCellX</span>
+        <span class="brand-suffix">v1.0</span>
+      </div>
+      <div class="topbar-spacer"></div>
+      <a href="/dashboard.html" class="nav-link active">Projects</a>
+      <div id="user-pill" class="user-pill"><span class="dot"></span><span id="user-name">…</span></div>
+      <button class="btn-logout" onclick="logout()">Sign out</button>
+    </nav>
+
+    <div class="container">
+
+      <div class="page-header">
+        <div>
+          <div class="page-eyebrow">Workspace</div>
+          <h1 class="page-title">Your projects</h1>
+          <p class="page-subtitle">Each project groups datasets and analysis runs. Start by creating one.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ New project</button>
+      </div>
+
+      <div id="loading" class="empty">
+        <div class="spinner" style="width: 28px; height: 28px;"></div>
+        <p class="text-dim text-sm mt-24">Loading projects…</p>
+      </div>
+
+      <div id="empty-state" class="empty hidden">
+        <div class="empty-title">No projects yet</div>
+        <div class="empty-sub">Projects organize your datasets and analysis runs. Create your first one to get started.</div>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Create your first project</button>
+      </div>
+
+      <div id="project-list" class="grid-3 hidden"></div>
+
+    </div>
+  </div>
+
+  <!-- Create project modal -->
+  <div id="modal" class="loading-overlay hidden">
+    <div class="card" style="max-width: 480px; width: 100%;">
+      <h3 class="card-title">New project</h3>
+      <p class="card-sub">Name your project. You can add datasets after.</p>
+      <form id="create-form">
+        <div class="form-group">
+          <label class="form-label" for="proj-name">Project name</label>
+          <input class="form-input" id="proj-name" type="text" required maxlength="128" placeholder="e.g. PBMC-3k benchmark">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="proj-desc">Description (optional)</label>
+          <textarea class="form-input" id="proj-desc" rows="3" placeholder="What is this project about?"></textarea>
+        </div>
+        <div id="create-err" class="form-error hidden"></div>
+        <div class="flex gap-12" style="justify-content: flex-end;">
+          <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="create-btn">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!requireAuth()) {} // redirect happens inside
+
+    const user = Storage.getUser();
+    if (user) document.getElementById('user-name').textContent = user.username;
+
+    const listEl = document.getElementById('project-list');
+    const loadingEl = document.getElementById('loading');
+    const emptyEl = document.getElementById('empty-state');
+
+    async function loadProjects() {
+      try {
+        const projects = await Api.listProjects();
+        loadingEl.classList.add('hidden');
+        if (projects.length === 0) {
+          emptyEl.classList.remove('hidden');
+          listEl.classList.add('hidden');
+          return;
+        }
+        emptyEl.classList.add('hidden');
+        listEl.classList.remove('hidden');
+        listEl.innerHTML = projects.map(p => `
+          <a class="card" href="/project.html?id=${p.id}" style="text-decoration:none;color:inherit;display:block;">
+            <h3 class="card-title">${escapeHtml(p.name)}</h3>
+            <p class="text-dim text-sm" style="min-height: 40px;">${escapeHtml(p.description || 'No description.')}</p>
+            <div class="flex between center text-mono text-xs text-faint" style="margin-top: 16px;">
+              <span>${p.n_datasets} datasets · ${p.n_runs} runs</span>
+              <span>${new Date(p.updated_at).toLocaleDateString()}</span>
+            </div>
+          </a>
+        `).join('');
+      } catch (err) {
+        loadingEl.innerHTML = `<p class="form-error">Failed to load projects: ${escapeHtml(String(err.detail || err.message))}</p>`;
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // Modal
+    const modal = document.getElementById('modal');
+    function openCreateModal() { modal.classList.remove('hidden'); document.getElementById('proj-name').focus(); }
+    function closeCreateModal() { modal.classList.add('hidden'); document.getElementById('create-form').reset(); document.getElementById('create-err').classList.add('hidden'); }
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeCreateModal(); });
+
+    document.getElementById('create-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('create-err');
+      err.classList.add('hidden');
+      const btn = document.getElementById('create-btn');
+      btn.disabled = true;
+      try {
+        const name = document.getElementById('proj-name').value.trim();
+        const desc = document.getElementById('proj-desc').value.trim() || null;
+        const proj = await Api.createProject(name, desc);
+        window.location.href = `/project.html?id=${proj.id}`;
+      } catch (e2) {
+        err.textContent = typeof e2.detail === 'string' ? e2.detail : 'Could not create project.';
+        err.classList.remove('hidden');
+        btn.disabled = false;
+      }
+    });
+
+    loadProjects();
+  </script>
+</body>
+</html>

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analysis · SingleCellX</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+
+    <nav class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <span class="brand-name">SingleCellX</span>
+        <span class="brand-suffix">v1.0</span>
+      </div>
+      <div class="topbar-spacer"></div>
+      <a href="/dashboard.html" class="nav-link">Projects</a>
+      <div id="user-pill" class="user-pill"><span class="dot"></span><span id="user-name">…</span></div>
+      <button class="btn-logout" onclick="logout()">Sign out</button>
+    </nav>
+
+    <div class="container">
+
+      <div class="breadcrumb">
+        <a href="/dashboard.html">Projects</a>
+        <span class="breadcrumb-sep">›</span>
+        <a href="#" id="bc-project">project</a>
+        <span class="breadcrumb-sep">›</span>
+        <span id="bc-run">…</span>
+      </div>
+
+      <!-- Live status (visible while not completed) -->
+      <div id="status-card" class="card hidden">
+        <div class="flex between center">
+          <div>
+            <div class="page-eyebrow">Pipeline status</div>
+            <h2 class="page-title" id="status-name" style="font-size:28px">Running…</h2>
+            <p id="status-step" class="text-dim text-sm mb-16">Initializing…</p>
+            <div class="progress-track" style="width: 100%; max-width: 480px;">
+              <div class="progress-fill" id="status-bar" style="width:0%"></div>
+            </div>
+            <p class="text-faint text-sm mt-24">This page will refresh automatically every 2 seconds.</p>
+          </div>
+          <div>
+            <span id="status-pill" class="pill pill-cyan pill-pulse">running</span>
+          </div>
+        </div>
+        <div id="status-error" class="alert alert-error hidden" style="margin-top:24px"></div>
+      </div>
+
+      <!-- Loaded results view -->
+      <div id="result-view" class="hidden">
+        <div class="page-header">
+          <div>
+            <div class="page-eyebrow">Analysis run</div>
+            <h1 class="page-title" id="run-name">…</h1>
+            <p class="page-subtitle">
+              <span id="run-meta" class="text-dim"></span>
+            </p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-ghost" onclick="exportJSON()">↓ Export JSON</button>
+            <a class="btn btn-ghost" id="back-link" href="#">← Back to project</a>
+          </div>
+        </div>
+
+        <!-- KPI summary -->
+        <div class="summary-grid" id="summary-grid"></div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+          <div class="tab active" data-tab="overview">Overview</div>
+          <div class="tab"        data-tab="projections">Projections</div>
+          <div class="tab"        data-tab="markers">Marker genes</div>
+          <div class="tab"        data-tab="logs">Logs</div>
+          <div class="tab"        data-tab="params">Parameters</div>
+        </div>
+
+        <!-- OVERVIEW -->
+        <div class="tab-panel active" id="panel-overview">
+          <div class="chart-row">
+            <div class="card">
+              <div class="chart-title">PCA variance explained</div>
+              <div class="chart-sub">Per-component and cumulative variance</div>
+              <div id="chart-variance" style="height: 340px;"></div>
+            </div>
+            <div class="card">
+              <div class="chart-title">Cluster distribution</div>
+              <div class="chart-sub">Number of cells in each cluster (post-QC)</div>
+              <div id="chart-cluster-bar" style="height: 340px;"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="chart-title">QC summary</div>
+            <div class="chart-sub">Filtering &amp; normalization statistics</div>
+            <table class="table" id="qc-table" style="margin-top:16px;"></table>
+          </div>
+        </div>
+
+        <!-- PROJECTIONS -->
+        <div class="tab-panel" id="panel-projections">
+          <div class="chart-row">
+            <div class="card">
+              <div class="chart-title">UMAP projection</div>
+              <div class="chart-sub">Non-linear 2D embedding colored by cluster</div>
+              <div id="chart-umap" style="height: 480px;"></div>
+            </div>
+            <div class="card">
+              <div class="chart-title">t-SNE projection</div>
+              <div class="chart-sub">Stochastic-neighbor 2D embedding colored by cluster</div>
+              <div id="chart-tsne" style="height: 480px;"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="chart-title">Cluster legend</div>
+            <div id="cluster-legend" class="cluster-legend"></div>
+          </div>
+        </div>
+
+        <!-- MARKERS -->
+        <div class="tab-panel" id="panel-markers">
+          <div class="card">
+            <div class="chart-title">Volcano plot</div>
+            <div class="chart-sub">Log2 fold-change vs −log10(p) across all clusters &amp; genes</div>
+            <div id="chart-volcano" style="height: 460px;"></div>
+          </div>
+          <div class="card" style="margin-top:20px;">
+            <div class="chart-title">Top marker genes per cluster</div>
+            <div class="chart-sub">Genes ranked by absolute log-fold change (Welch t-test)</div>
+            <div id="marker-tables" style="margin-top:16px;"></div>
+          </div>
+        </div>
+
+        <!-- LOGS -->
+        <div class="tab-panel" id="panel-logs">
+          <div class="card">
+            <div class="chart-title">Pipeline log</div>
+            <div class="chart-sub">Server-side execution trace</div>
+            <div class="log-viewer" id="log-viewer"></div>
+          </div>
+        </div>
+
+        <!-- PARAMS -->
+        <div class="tab-panel" id="panel-params">
+          <div class="card">
+            <div class="chart-title">Run configuration</div>
+            <div class="chart-sub">Exact parameters used by this pipeline run (reproducible)</div>
+            <table class="table" id="params-table" style="margin-top:16px;"></table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/charts.js"></script>
+  <script>
+    if (!requireAuth()) {}
+
+    const params = new URLSearchParams(window.location.search);
+    const runId  = parseInt(params.get('id'));
+    if (!runId) window.location.href = '/dashboard.html';
+
+    let pollTimer = null;
+    let resultData = null;
+
+    (async function init() {
+      try {
+        const me = await Api.me();
+        document.getElementById('user-name').textContent = me.full_name || me.username;
+      } catch (e) { logout(); return; }
+
+      await loadRun();
+    })();
+
+    /* ---------- run lifecycle ---------- */
+    async function loadRun() {
+      try {
+        const run = await Api.getAnalysis(runId);
+        document.getElementById('bc-run').textContent = run.name;
+        document.getElementById('bc-project').href = `/project.html?id=${run.project_id}`;
+        document.getElementById('back-link').href  = `/project.html?id=${run.project_id}`;
+
+        if (run.status === 'completed') {
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          await loadResults();
+        } else if (run.status === 'failed') {
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          showStatus(run);
+          const err = document.getElementById('status-error');
+          err.textContent = 'Pipeline failed: ' + (run.error_message || 'unknown error');
+          err.classList.remove('hidden');
+          document.getElementById('status-pill').className = 'pill pill-red';
+          document.getElementById('status-pill').textContent = 'failed';
+        } else {
+          showStatus(run);
+          if (!pollTimer) pollTimer = setInterval(loadRun, 2000);
+        }
+      } catch (e) {
+        toast('Failed to load run: ' + e.message, 'error');
+      }
+    }
+
+    function showStatus(run) {
+      document.getElementById('status-card').classList.remove('hidden');
+      document.getElementById('result-view').classList.add('hidden');
+      document.getElementById('status-name').textContent = run.name;
+      document.getElementById('status-step').textContent = run.current_step || `Status: ${run.status}`;
+      document.getElementById('status-bar').style.width  = (run.progress || 0) + '%';
+    }
+
+    async function loadResults() {
+      try {
+        const data = await Api.getAnalysisResults(runId);
+        resultData = data;
+
+        document.getElementById('status-card').classList.add('hidden');
+        document.getElementById('result-view').classList.remove('hidden');
+
+        renderHeader(data);
+        renderSummary(data);
+        renderOverview(data);
+        renderProjections(data);
+        renderMarkers(data);
+        renderLogs(data);
+        renderParams(data);
+        bindTabs();
+      } catch (e) {
+        toast('Failed to load results: ' + e.message, 'error');
+      }
+    }
+
+    /* ---------- renderers ---------- */
+    function renderHeader(d) {
+      const r = d.run;
+      document.getElementById('run-name').textContent = r.name;
+      const completed = r.completed_at ? new Date(r.completed_at).toLocaleString() : '—';
+      document.getElementById('run-meta').textContent =
+        `Completed ${completed} · ${r.n_cells_qc} cells after QC · ${r.n_clusters} clusters · ${(r.variance_explained ?? 0).toFixed(1)}% variance captured`;
+    }
+
+    function renderSummary(d) {
+      const r = d.run;
+      const qc = d.qc;
+      const clusters = d.clusters;
+      const cards = [
+        { label: 'Cells (after QC)',  value: r.n_cells_qc.toLocaleString(), sub: `${qc.cells_input} → ${qc.cells_after_qc}` },
+        { label: 'Genes (after QC)',  value: r.n_genes_qc.toLocaleString(), sub: `${qc.genes_input} → ${qc.genes_after_qc}`, alt: true },
+        { label: 'Clusters detected', value: r.n_clusters,                  sub: `silhouette ${(clusters.silhouette ?? 0).toFixed(3)}` },
+        { label: 'Variance (PCA)',    value: (r.variance_explained ?? 0).toFixed(1) + '%', sub: `${d.pca.n_components} components`, alt: true },
+        { label: 'Marker genes',      value: countMarkers(d.markers),       sub: 'across all clusters' },
+        { label: 'Sparsity',          value: (qc.sparsity_pct ?? 0).toFixed(1) + '%', sub: 'zero entries in matrix', alt: true },
+      ];
+      document.getElementById('summary-grid').innerHTML = cards.map(c => `
+        <div class="summary-card ${c.alt ? 'alt' : ''}">
+          <div class="summary-label">${c.label}</div>
+          <div class="summary-value">${c.value}</div>
+          <div class="summary-sub">${c.sub}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderOverview(d) {
+      Charts.renderVariance('chart-variance', d.pca);
+      Charts.renderClusterBar('chart-cluster-bar', d.clusters);
+
+      const qc = d.qc;
+      const rows = [
+        ['Input cells',                qc.cells_input?.toLocaleString()],
+        ['Cells after QC',             qc.cells_after_qc?.toLocaleString()],
+        ['Cells removed',              (qc.cells_filtered || 0).toLocaleString()],
+        ['Input genes',                qc.genes_input?.toLocaleString()],
+        ['Genes after QC',             qc.genes_after_qc?.toLocaleString()],
+        ['Genes removed',              (qc.genes_filtered || 0).toLocaleString()],
+        ['Median genes / cell',        qc.median_genes_per_cell],
+        ['Median counts / cell',       qc.median_counts_per_cell],
+        ['Matrix sparsity',            (qc.sparsity_pct ?? 0).toFixed(2) + '%'],
+        ['Normalization',              'log1p library-size normalized'],
+      ];
+      document.getElementById('qc-table').innerHTML = `
+        <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+        <tbody>${rows.map(([k,v]) => `<tr><td class="text-dim">${k}</td><td class="mono">${v ?? '—'}</td></tr>`).join('')}</tbody>
+      `;
+    }
+
+    function renderProjections(d) {
+      Charts.renderScatter2D('chart-umap', d.umap, d.clusters.labels, 'UMAP-1', 'UMAP-2');
+      Charts.renderScatter2D('chart-tsne', d.tsne, d.clusters.labels, 't-SNE-1', 't-SNE-2');
+
+      const dist = d.clusters.distribution || {};
+      const legend = Object.entries(dist).map(([k, v]) => {
+        const idx = parseInt(k);
+        const color = Charts.CLUSTER_COLORS[idx % Charts.CLUSTER_COLORS.length];
+        return `<span class="cluster-chip"><span class="cluster-swatch" style="background:${color}"></span>Cluster ${k} · ${v} cells</span>`;
+      }).join('');
+      document.getElementById('cluster-legend').innerHTML = legend;
+    }
+
+    function renderMarkers(d) {
+      Charts.renderVolcano('chart-volcano', d.markers);
+
+      const container = document.getElementById('marker-tables');
+      const entries = Object.entries(d.markers || {}).sort((a, b) => {
+        const ai = parseInt(String(a[0]).replace(/\D+/g, '')) || 0;
+        const bi = parseInt(String(b[0]).replace(/\D+/g, '')) || 0;
+        return ai - bi;
+      });
+      container.innerHTML = entries.map(([cid, genes]) => {
+        const numId = parseInt(String(cid).replace(/\D+/g, '')) || 0;
+        const color = Charts.CLUSTER_COLORS[numId % Charts.CLUSTER_COLORS.length];
+        const rows = (genes || []).slice(0, 15).map(g => `
+          <tr>
+            <td class="strong mono">${g.gene}</td>
+            <td class="${g.log_fc >= 0 ? 'marker-up' : 'marker-down'}">${g.log_fc.toFixed(2)}</td>
+            <td class="mono">${(g.p_value < 0.001 ? g.p_value.toExponential(2) : g.p_value.toFixed(4))}</td>
+            <td class="mono text-dim">${g.pct_in.toFixed(0)}%</td>
+            <td class="mono text-dim">${g.pct_out.toFixed(0)}%</td>
+            <td class="text-dim text-sm">${g.trend || '—'}</td>
+          </tr>
+        `).join('');
+        return `
+          <div style="margin-bottom: 32px;">
+            <h4 style="display:flex; align-items:center; gap:10px; margin: 16px 0 12px; font-family:var(--font-display); font-weight:500; color: var(--ink);">
+              <span class="cluster-swatch" style="background:${color}; width:14px; height:14px;"></span>
+              ${cid} · top ${Math.min(15, (genes || []).length)} markers
+            </h4>
+            <table class="table marker-table">
+              <thead><tr><th>Gene</th><th>log₂ FC</th><th>p-value</th><th>% in</th><th>% out</th><th>Trend</th></tr></thead>
+              <tbody>${rows || '<tr><td colspan="6" class="text-dim">No significant markers</td></tr>'}</tbody>
+            </table>
+          </div>`;
+      }).join('');
+    }
+
+    function renderLogs(d) {
+      const logs = d.logs || [];
+      const html = logs.map(l => {
+        const t = new Date(l.timestamp).toLocaleTimeString();
+        const cls = `log-line log-${(l.level || 'info').toLowerCase()}`;
+        return `<div class="${cls}"><span class="log-time">${t}</span><span class="log-msg">${escapeHtml(l.message)}</span></div>`;
+      }).join('');
+      document.getElementById('log-viewer').innerHTML = html || '<div class="text-dim">No log entries</div>';
+    }
+
+    function renderParams(d) {
+      const p = d.run.parameters || {};
+      const rows = Object.entries(p).map(([k, v]) => `
+        <tr><td class="text-dim">${k}</td><td class="mono">${v === null ? 'auto' : v}</td></tr>
+      `).join('');
+      document.getElementById('params-table').innerHTML = `
+        <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+        <tbody>${rows}</tbody>
+      `;
+    }
+
+    /* ---------- tabs ---------- */
+    function bindTabs() {
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          const name = tab.dataset.tab;
+          document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+          document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+          // Plotly resize fix after tab show
+          if (name === 'projections' || name === 'overview' || name === 'markers') {
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+          }
+        });
+      });
+    }
+
+    /* ---------- export ---------- */
+    function exportJSON() {
+      if (!resultData) return;
+      const blob = new Blob([JSON.stringify(resultData, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `singlecellx_run_${runId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    /* ---------- helpers ---------- */
+    function countMarkers(markers) {
+      return Object.values(markers || {}).reduce((sum, arr) => sum + (arr ? arr.length : 0), 0);
+    }
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+  </script>
+</body>
+</html>

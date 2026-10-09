@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create account · SingleCellX</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <span class="brand-name">SingleCellX</span>
+        </div>
+        <div class="auth-tagline">NEW ACCOUNT · v1.0</div>
+      </div>
+
+      <h2 style="font-family: var(--font-display); font-size: 28px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.02em;">Create your account</h2>
+      <p class="text-dim text-sm mb-24">Manage projects and reproduce analyses.</p>
+
+      <form id="register-form">
+        <div class="form-group">
+          <label class="form-label" for="full_name">Full name</label>
+          <input class="form-input" id="full_name" type="text" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="username">Username</label>
+          <input class="form-input" id="username" type="text" autocomplete="username" required minlength="3" maxlength="64">
+          <div class="form-help">3–64 characters.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email">Email</label>
+          <input class="form-input" id="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <input class="form-input" id="password" type="password" autocomplete="new-password" required minlength="6">
+          <div class="form-help">At least 6 characters.</div>
+        </div>
+
+        <div id="error-msg" class="form-error hidden"></div>
+
+        <button class="btn btn-primary" type="submit" id="submit-btn" style="width: 100%;">
+          <span id="btn-label">Create account</span>
+          <span id="btn-spin" class="spinner hidden"></span>
+        </button>
+      </form>
+
+      <div class="auth-switch">
+        Already registered? <a href="/login.html">Sign in</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (Storage.getToken()) window.location.href = '/dashboard.html';
+
+    const form = document.getElementById('register-form');
+    const errEl = document.getElementById('error-msg');
+    const btn = document.getElementById('submit-btn');
+    const lbl = document.getElementById('btn-label');
+    const spn = document.getElementById('btn-spin');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.classList.add('hidden');
+      btn.disabled = true; lbl.classList.add('hidden'); spn.classList.remove('hidden');
+      try {
+        const data = await Api.register({
+          full_name: document.getElementById('full_name').value.trim() || null,
+          username:  document.getElementById('username').value.trim(),
+          email:     document.getElementById('email').value.trim(),
+          password:  document.getElementById('password').value,
+        });
+        Storage.setToken(data.access_token);
+        Storage.setUser(data.user);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        errEl.textContent = typeof err.detail === 'string' ? err.detail : 'Could not create account.';
+        errEl.classList.remove('hidden');
+        btn.disabled = false; lbl.classList.remove('hidden'); spn.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
